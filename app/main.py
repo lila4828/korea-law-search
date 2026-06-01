@@ -105,18 +105,47 @@ def finalize_db(x_upload_token: str = Header(...)):
     return {"status": "ok", "chunks": len(chunks), "size_mb": round(size_mb, 1)}
 
 
+_fetch_status: dict = {"state": "idle", "progress": "", "error": ""}
+
+
 @app.post("/admin/fetch-db", include_in_schema=False)
 def fetch_db(body: dict, x_upload_token: str = Header(...)):
-    """외부 URL에서 DB 파일을 직접 다운로드"""
-    import urllib.request
+    """백그라운드 스레드로 외부 URL에서 DB 다운로드 (프록시 타임아웃 우회)"""
+    import threading, urllib.request
     _check_token(x_upload_token)
     url = body.get("url", "")
     if not url:
         raise HTTPException(400, "url 필드가 필요합니다")
+    if _fetch_status["state"] == "running":
+        return {"status": "already_running", "progress": _fetch_status["progress"]}
+
+    def _download():
+        _fetch_status["state"] = "running"
+        _fetch_status["error"] = ""
+        db_path = os.environ.get("DB_PATH", "data/law.db")
+        os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+        tmp = db_path + ".tmp"
+        try:
+            def _report(count, block, total):
+                pct = count * block * 100 // total if total > 0 else 0
+                _fetch_status["progress"] = f"{min(pct,100)}% ({count*block//1024//1024}MB/{total//1024//1024}MB)"
+            urllib.request.urlretrieve(url, tmp, reporthook=_report)
+            os.replace(tmp, db_path)
+            size_mb = os.path.getsize(db_path) / 1024 / 1024
+            _fetch_status["state"] = "done"
+            _fetch_status["progress"] = f"완료 {size_mb:.1f}MB"
+        except Exception as e:
+            _fetch_status["state"] = "error"
+            _fetch_status["error"] = str(e)
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+    threading.Thread(target=_download, daemon=True).start()
+    return {"status": "started", "message": "/admin/fetch-status 로 진행률 확인"}
+
+
+@app.get("/admin/fetch-status", include_in_schema=False)
+def fetch_status():
     db_path = os.environ.get("DB_PATH", "data/law.db")
-    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
-    tmp = db_path + ".tmp"
-    urllib.request.urlretrieve(url, tmp)
-    os.replace(tmp, db_path)
-    size_mb = os.path.getsize(db_path) / 1024 / 1024
-    return {"status": "ok", "size_mb": round(size_mb, 1)}
+    size_mb = os.path.getsize(db_path) / 1024 / 1024 if os.path.exists(db_path) else 0
+    return {**_fetch_status, "db_size_mb": round(size_mb, 1)}
