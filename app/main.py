@@ -60,20 +60,46 @@ def index():
     return FileResponse("app/static/index.html")
 
 
-# 임시 DB 업로드 엔드포인트 — 업로드 완료 후 삭제 예정
-@app.post("/admin/upload-db", include_in_schema=False)
-async def upload_db(
+# 청크 업로드 엔드포인트 — 업로드 완료 후 삭제 예정
+def _check_token(token: str):
+    secret = os.environ.get("UPLOAD_TOKEN", "")
+    if not secret or token != secret:
+        raise HTTPException(403, "forbidden")
+
+
+@app.post("/admin/upload-chunk/{index}", include_in_schema=False)
+async def upload_chunk(
+    index: int,
     file: UploadFile = File(...),
     x_upload_token: str = Header(...),
 ):
-    secret = os.environ.get("UPLOAD_TOKEN", "")
-    if not secret or x_upload_token != secret:
-        raise HTTPException(403, "forbidden")
+    _check_token(x_upload_token)
     db_path = os.environ.get("DB_PATH", "data/law.db")
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    tmp = db_path + ".tmp"
-    with open(tmp, "wb") as f:
+    chunk_path = f"{db_path}.chunk.{index:04d}"
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    with open(chunk_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
+    size = os.path.getsize(chunk_path)
+    return {"status": "ok", "chunk": index, "bytes": size}
+
+
+@app.post("/admin/finalize-db", include_in_schema=False)
+def finalize_db(x_upload_token: str = Header(...)):
+    _check_token(x_upload_token)
+    db_path = os.environ.get("DB_PATH", "data/law.db")
+    data_dir = os.path.dirname(db_path) or "."
+    chunks = sorted(f for f in os.listdir(data_dir) if f.startswith("law.db.chunk."))
+    if not chunks:
+        raise HTTPException(400, "청크 파일이 없습니다")
+    tmp = db_path + ".tmp"
+    total = 0
+    with open(tmp, "wb") as out:
+        for chunk_name in chunks:
+            chunk_path = os.path.join(data_dir, chunk_name)
+            with open(chunk_path, "rb") as f:
+                shutil.copyfileobj(f, out)
+            total += os.path.getsize(chunk_path)
+            os.remove(chunk_path)
     os.replace(tmp, db_path)
     size_mb = os.path.getsize(db_path) / 1024 / 1024
-    return {"status": "ok", "size_mb": round(size_mb, 1)}
+    return {"status": "ok", "chunks": len(chunks), "size_mb": round(size_mb, 1)}
