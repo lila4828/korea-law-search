@@ -19,7 +19,40 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    db_path = os.environ.get("DB_PATH", "data/law.db")
+    data_dir = os.path.dirname(db_path) or "."
+    return {
+        "status": "ok",
+        "db_path": db_path,
+        "db_exists": os.path.exists(db_path),
+        "db_size_mb": round(os.path.getsize(db_path) / 1024 / 1024, 1) if os.path.exists(db_path) else 0,
+        "data_dir_exists": os.path.exists(data_dir),
+        "data_dir_writable": os.access(data_dir, os.W_OK),
+    }
+
+
+@app.get("/admin/diag", include_in_schema=False)
+def diag():
+    db_path = os.environ.get("DB_PATH", "data/law.db")
+    data_dir = os.path.dirname(db_path) or "."
+    try:
+        test_file = os.path.join(data_dir, ".write_test")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        os.remove(test_file)
+        writable = True
+    except Exception as e:
+        writable = str(e)
+    return {
+        "db_path": db_path,
+        "data_dir": data_dir,
+        "data_dir_exists": os.path.exists(data_dir),
+        "data_dir_writable": writable,
+        "db_exists": os.path.exists(db_path),
+        "db_size_mb": round(os.path.getsize(db_path) / 1024 / 1024, 1) if os.path.exists(db_path) else 0,
+        "cwd": os.getcwd(),
+        "ls_app": os.listdir("/app") if os.path.exists("/app") else [],
+    }
 
 
 @app.get("/", include_in_schema=False)
