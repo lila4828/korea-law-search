@@ -125,6 +125,9 @@ def fetch_db(body: dict, x_upload_token: str = Header(...)):
         db_path = os.environ.get("DB_PATH", "data/law.db")
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         tmp = db_path + ".tmp"
+        # 이전 실패한 tmp 파일 제거
+        if os.path.exists(tmp):
+            os.remove(tmp)
         try:
             def _report(count, block, total):
                 pct = count * block * 100 // total if total > 0 else 0
