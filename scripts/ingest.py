@@ -7,9 +7,80 @@ import json
 import os
 import re
 import sqlite3
+import struct
 import sys
 import zipfile
+import zlib
 from pathlib import Path
+
+LOCAL_SIG = b'PK\x03\x04'
+DD_SIG = b'PK\x07\x08'
+
+
+def stream_zip(zip_path):
+    """ZIP 로컬 헤더를 직접 읽어 스트리밍. 중앙 디렉토리 미사용 → 메모리 O(1)"""
+    with open(zip_path, 'rb') as f:
+        while True:
+            sig = f.read(4)
+            if len(sig) < 4 or sig != LOCAL_SIG:
+                break
+            raw = f.read(26)
+            if len(raw) < 26:
+                break
+            # 로컬 헤더 26바이트: 5×H + 3×I + 2×H
+            (_, flags, compression, _, _, _,
+             comp_size, uncomp_size, fn_len, extra_len) = struct.unpack('<HHHHHIIIHH', raw)
+
+            filename = f.read(fn_len).decode('utf-8', errors='ignore')
+            f.read(extra_len)
+
+            # 디렉토리 엔트리 — 데이터 없음
+            if filename.endswith('/'):
+                if comp_size > 0:
+                    f.read(comp_size)
+                continue
+
+            has_dd = bool(flags & 0x08)  # bit3: 데이터 디스크립터 플래그
+
+            if has_dd:
+                # 압축 크기 미정 → 다음 PK 시그니처까지 스캔
+                buf = b''
+                found = False
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    for marker in (DD_SIG, LOCAL_SIG):
+                        idx = buf.find(marker)
+                        if idx != -1:
+                            comp_data = buf[:idx]
+                            back = len(buf) - idx - (12 if marker == DD_SIG else 0)
+                            if back > 0:
+                                f.seek(-back, 1)
+                            if marker == DD_SIG:
+                                f.read(12)
+                            found = True
+                            break
+                    if found:
+                        break
+                    buf = buf[-8:]
+                if not found:
+                    continue
+            else:
+                comp_data = f.read(comp_size)
+
+            try:
+                if compression == 8:
+                    content = zlib.decompress(comp_data, -15)
+                elif compression == 0:
+                    content = comp_data
+                else:
+                    continue
+            except Exception:
+                continue
+            yield filename, content
+
 
 ZIPS = {
     "cases": "cases-판례.zip",
@@ -162,15 +233,90 @@ def _insert_cases(conn: sqlite3.Connection, rows: list):
     conn.commit()
 
 
+def ingest_statutes_streaming(conn: sqlite3.Connection, zip_path: str, label: str):
+    """로컬 헤더 스트리밍 — 중앙 디렉토리 없이 O(1) 메모리로 대용량 zip 처리"""
+    print(f"[법령(스트리밍):{label}] {zip_path}")
+    current_statute_id = None
+    current_base = ""
+    article_rows: list = []
+    statute_count = 0
+
+    def flush():
+        if article_rows and current_statute_id:
+            conn.executemany(
+                "INSERT INTO articles (statute_id,article_no,article_title,content) VALUES (?,?,?,?)",
+                article_rows,
+            )
+            conn.commit()
+            article_rows.clear()
+
+    for filename, content in stream_zip(zip_path):
+        if filename.endswith("meta.json"):
+            flush()
+            try:
+                meta = json.loads(content.decode("utf-8", errors="ignore"))
+            except Exception:
+                current_statute_id = None
+                continue
+            region = meta.get("region", {}) or {}
+            law_id = meta.get("alr_bdt_id", "") or meta.get("law_id", "")
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO statutes
+                   (law_id,name,kind,region_sido,region_sigungu,region_branch,
+                    promulgated_on,effective_from,source_url,trust_grade,version_count,estrev_label)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (law_id, meta.get("ord_name",""), meta.get("ord_kind",""),
+                 region.get("sido",""), region.get("sigungu",""), region.get("branch",""),
+                 meta.get("promulgated_on",""), meta.get("effective_from",""),
+                 meta.get("source_url",""), meta.get("trust_grade",""),
+                 meta.get("version_count",1), meta.get("estrev_label","")),
+            )
+            current_statute_id = cur.lastrowid or None
+            current_base = filename.replace("meta.json", "current.articles/")
+            statute_count += 1
+            if statute_count % 2000 == 0:
+                print(f"  {statute_count}개 처리 중...")
+
+        elif "current.articles" in filename and filename.endswith(".txt"):
+            if not current_statute_id:
+                continue
+            if not filename.startswith(current_base):
+                continue
+            try:
+                text = content.decode("utf-8", errors="ignore")
+                fname = Path(filename).stem
+                parts = fname.split("_", 2)
+                article_no = parts[1] if len(parts) > 1 else ""
+                article_title = parts[2].replace("_", " ") if len(parts) > 2 else ""
+                article_rows.append((current_statute_id, article_no, article_title, text))
+            except Exception:
+                continue
+
+    flush()
+    print(f"  완료: {statute_count}개 법령")
+
+
 def ingest_statutes(conn: sqlite3.Connection, zip_path: str, label: str):
+    """메모리 효율적 법령 ingest — zip을 한 번만 순회해서 O(n) 처리"""
     print(f"[법령:{label}] {zip_path}")
     with zipfile.ZipFile(zip_path) as z:
-        names = z.namelist()
-        metas = [n for n in names if n.endswith("meta.json")]
-        total = len(metas)
-        print(f"  법령 수: {total}")
+        # 1단계: 단일 순회로 meta 경로와 조문 경로를 분류·인덱싱
+        print("  인덱싱 중...")
+        meta_paths = []
+        article_index: dict[str, list[str]] = {}  # statute_base → [art_paths]
 
-        for i, meta_path in enumerate(metas):
+        for name in z.namelist():
+            if name.endswith("meta.json"):
+                meta_paths.append(name)
+            elif "current.articles" in name and name.endswith(".txt"):
+                base = name.split("current.articles/")[0] + "current.articles/"
+                article_index.setdefault(base, []).append(name)
+
+        total = len(meta_paths)
+        print(f"  법령 수: {total}, 조문 그룹: {len(article_index)}")
+
+        # 2단계: 각 법령 처리
+        for i, meta_path in enumerate(meta_paths):
             if i % 2000 == 0:
                 print(f"  {i}/{total}...")
             try:
@@ -205,15 +351,13 @@ def ingest_statutes(conn: sqlite3.Connection, zip_path: str, label: str):
             if statute_id == 0:
                 continue
 
-            # 조문 삽입
+            # O(1) 조문 조회 — 인덱스 활용
             base = meta_path.replace("meta.json", "current.articles/")
             article_rows = []
-            for art_name in names:
-                if not art_name.startswith(base) or not art_name.endswith(".txt"):
-                    continue
+            for art_name in article_index.get(base, []):
                 try:
                     content = z.read(art_name).decode("utf-8", errors="ignore")
-                    fname = Path(art_name).stem  # e.g. 0013_제5조_잠재지문_감정
+                    fname = Path(art_name).stem
                     parts = fname.split("_", 2)
                     article_no = parts[1] if len(parts) > 1 else ""
                     article_title = parts[2].replace("_", " ") if len(parts) > 2 else ""
@@ -228,6 +372,8 @@ def ingest_statutes(conn: sqlite3.Connection, zip_path: str, label: str):
                 )
             conn.commit()
 
+        # 처리 후 article_index 메모리 해제
+        article_index.clear()
     print(f"  완료")
 
 
@@ -286,6 +432,9 @@ def main():
             continue
         if key == "cases":
             ingest_cases(conn, path)
+        elif key in ("jeonnam", "jeonbuk"):
+            # 대용량 zip → 중앙 디렉토리 없는 스트리밍 방식
+            ingest_statutes_streaming(conn, path, key)
         else:
             ingest_statutes(conn, path, key)
 
