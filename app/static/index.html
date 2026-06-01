@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>한국 법률 데이터 검색</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans KR', system-ui, sans-serif; background: #f5f7fa; color: #1a1a2e; }
+  header { background: #1a1a2e; color: #fff; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header h1 { font-size: 1.2rem; font-weight: 700; }
+  header span { font-size: 0.8rem; opacity: 0.6; }
+
+  .tabs { display: flex; gap: 0; background: #16213e; overflow-x: auto; }
+  .tab-btn { padding: 0.75rem 1.2rem; border: none; background: transparent; color: #aaa;
+             cursor: pointer; font-size: 0.85rem; white-space: nowrap; border-bottom: 3px solid transparent; }
+  .tab-btn.active { color: #fff; border-bottom-color: #4fc3f7; }
+  .tab-btn:hover { color: #fff; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card { background: #fff; border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem;
+          box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .card h2 { font-size: 1rem; color: #16213e; margin-bottom: 1rem; border-left: 3px solid #4fc3f7; padding-left: .6rem; }
+
+  .form-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: .75rem; }
+  .form-group { display: flex; flex-direction: column; gap: .3rem; }
+  .form-group label { font-size: .75rem; color: #666; font-weight: 600; }
+  input, select { padding: .5rem .75rem; border: 1px solid #ddd; border-radius: 6px; font-size: .875rem;
+                  outline: none; background: #fafafa; }
+  input:focus, select:focus { border-color: #4fc3f7; background: #fff; }
+  input[type=text] { min-width: 200px; }
+
+  button { padding: .5rem 1.2rem; background: #1a1a2e; color: #fff; border: none;
+           border-radius: 6px; cursor: pointer; font-size: .875rem; }
+  button:hover { background: #16213e; }
+  button.secondary { background: #4fc3f7; color: #000; }
+  button.export-btn { background: #0d7377; font-size: .8rem; padding: .4rem .9rem; }
+
+  .result-meta { font-size: .8rem; color: #666; margin-bottom: .75rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th { background: #f0f4f8; text-align: left; padding: .6rem .75rem; font-weight: 600; color: #333; }
+  td { padding: .6rem .75rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  tr:hover td { background: #f9fbff; }
+  td.summary { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; font-size: .8rem; }
+  td a { color: #0d7377; text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+
+  .badge { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .7rem; font-weight: 600; }
+  .badge-민사 { background: #e3f2fd; color: #1565c0; }
+  .badge-형사 { background: #fce4ec; color: #c62828; }
+  .badge-가사 { background: #f3e5f5; color: #6a1b9a; }
+  .badge-세무 { background: #fff3e0; color: #e65100; }
+  .badge-행정 { background: #e8f5e9; color: #2e7d32; }
+  .badge-특허 { background: #ede7f6; color: #4527a0; }
+  .badge-기타 { background: #f5f5f5; color: #555; }
+  .badge-A { background: #c8e6c9; color: #1b5e20; }
+  .badge-B { background: #fff9c4; color: #f57f17; }
+  .badge-C { background: #ffcdd2; color: #b71c1c; }
+  .badge-현행 { background: #c8e6c9; color: #1b5e20; }
+  .badge-미시행 { background: #ffcdd2; color: #b71c1c; }
+
+  .pagination { display: flex; gap: .5rem; margin-top: 1rem; align-items: center; font-size: .85rem; }
+  .pagination button { padding: .3rem .7rem; font-size: .8rem; }
+  .pagination span { color: #666; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+  .stat-box { background: #fff; border-radius: 8px; padding: 1rem; text-align: center;
+              box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+  .stat-box .num { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; }
+  .stat-box .lbl { font-size: .75rem; color: #666; margin-top: .3rem; }
+
+  .diff-box { background: #1a1a2e; color: #e0e0e0; border-radius: 8px; padding: 1rem;
+              font-family: monospace; font-size: .8rem; overflow-x: auto; white-space: pre; max-height: 500px; overflow-y: auto; }
+  .diff-box .add { color: #81c784; }
+  .diff-box .del { color: #e57373; }
+
+  .chart-bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; font-size: .8rem; }
+  .chart-bar .bar-label { min-width: 120px; text-align: right; color: #444; }
+  .chart-bar .bar-fill { height: 18px; background: #4fc3f7; border-radius: 3px; min-width: 4px; }
+  .chart-bar .bar-val { color: #666; }
+
+  #graph-vis { width: 100%; height: 400px; background: #1a1a2e; border-radius: 8px;
+               display: flex; align-items: center; justify-content: center; color: #aaa;
+               font-size: .85rem; overflow: auto; }
+  .node-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .node-chip { padding: .3rem .7rem; border-radius: 20px; font-size: .75rem; }
+  .node-chip.statute { background: #e3f2fd; color: #1565c0; }
+  .node-chip.case { background: #fce4ec; color: #c62828; }
+
+  #toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1a1a2e; color: #fff;
+           padding: .75rem 1.2rem; border-radius: 8px; font-size: .85rem; display: none; z-index: 999; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>한국 법률 데이터 검색</h1>
+  <span id="db-summary"></span>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('search-case')">판례 검색</button>
+  <button class="tab-btn" onclick="switchTab('search-statute')">법령 검색</button>
+  <button class="tab-btn" onclick="switchTab('stats')">통계 분석</button>
+  <button class="tab-btn" onclick="switchTab('compare')">지역 비교</button>
+  <button class="tab-btn" onclick="switchTab('validity')">유효성 검증</button>
+  <button class="tab-btn" onclick="switchTab('graph')">인용 그래프</button>
+  <button class="tab-btn" onclick="switchTab('history')">법령 이력</button>
+  <button class="tab-btn" onclick="switchTab('export')">데이터 추출</button>
+</div>
+
+<div class="container">
+
+<!-- 1. 판례 검색 -->
+<div id="panel-search-case" class="panel active">
+  <div class="card">
+    <h2>판례 검색</h2>
+    <div class="form-row">
+      <div class="form-group"><label>검색어</label><input type="text" id="case-q" placeholder="판결요지 전문 검색..."></div>
+      <div class="form-group"><label>사건종류</label>
+        <select id="case-type">
+          <option value="">전체</option>
+          <option>민사</option><option>형사</option><option>가사</option>
+          <option>세무</option><option>일반행정</option><option>특허</option><option>기타</option>
+        </select>
+      </div>
+      <div class="form-group"><label>법원명</label><input type="text" id="case-court" placeholder="예: 대법원"></div>
+      <div class="form-group"><label>선고일 시작</label><input type="date" id="case-date-from"></div>
+      <div class="form-group"><label>선고일 종료</label><input type="date" id="case-date-to"></div>
+      <button onclick="searchCases(1)">검색</button>
+    </div>
+  </div>
+  <div class="card" id="case-results" style="display:none">
+    <div class="result-meta" id="case-meta"></div>
+    <div style="overflow-x:auto"><table id="case-table"></table></div>
+    <div class="pagination" id="case-page"></div>
+  </div>
+</div>
+
+<!-- 2. 법령 검색 -->
+<div id="panel-search-statute" class="panel">
+  <div class="card">
+    <h2>법령 검색</h2>
+    <div class="form-row">
+      <div class="form-group"><label>검색어</label><input type="text" id="st-q" placeholder="법령명 또는 조문 내용..."></div>
+      <div class="form-group"><label>종류</label>
+        <select id="st-kind">
+          <option value="">전체</option>
+          <option>예규</option><option>훈령</option><option>고시</option><option>지침</option>
+        </select>
+      </div>
+      <div class="form-group"><label>시도</label><input type="text" id="st-sido" placeholder="예: 광주광역시"></div>
+      <div class="form-group"><label>신뢰등급</label>
+        <select id="st-grade"><option value="">전체</option><option>A</option><option>B</option><option>C</option></select>
+      </div>
+      <button onclick="searchStatutes(1)">검색</button>
+    </div>
+  </div>
+  <div class="card" id="st-results" style="display:none">
+    <div class="result-meta" id="st-meta"></div>
+    <div style="overflow-x:auto"><table id="st-table"></table></div>
+    <div class="pagination" id="st-page"></div>
+  </div>
+</div>
+
+<!-- 3. 통계 분석 -->
+<div id="panel-stats" class="panel">
+  <div class="card">
+    <h2>전체 현황</h2>
+    <div class="stat-grid" id="stat-summary"></div>
+  </div>
+  <div class="card">
+    <h2>사건종류별 판례</h2>
+    <div id="chart-case-type"></div>
+  </div>
+  <div class="card">
+    <h2>연도별 판례 추이</h2>
+    <div id="chart-year"></div>
+  </div>
+  <div class="card">
+    <h2>지역별 법령 수</h2>
+    <div id="chart-region"></div>
+  </div>
+</div>
+
+<!-- 4. 지역 비교 -->
+<div id="panel-compare" class="panel">
+  <div class="card">
+    <h2>지역 법령 비교</h2>
+    <div class="form-row">
+      <div class="form-group"><label>키워드</label><input type="text" id="cmp-keyword" placeholder="예: 직소민원, 공유재산"></div>
+      <button onclick="compareRegions()">비교</button>
+    </div>
+  </div>
+  <div class="card" id="cmp-results" style="display:none">
+    <div id="cmp-content"></div>
+  </div>
+  <div class="card">
+    <h2>조문 텍스트 Diff</h2>
+    <div class="form-row">
+      <div class="form-group"><label>법령 ID 1</label><input type="number" id="diff-id1" placeholder="ID"></div>
+      <div class="form-group"><label>법령 ID 2</label><input type="number" id="diff-id2" placeholder="ID"></div>
+      <button onclick="diffStatutes()">비교</button>
+    </div>
+    <div class="diff-box" id="diff-result" style="display:none"></div>
+  </div>
+</div>
+
+<!-- 5. 유효성 검증 -->
+<div id="panel-validity" class="panel">
+  <div class="card">
+    <h2>법령 유효성 검증</h2>
+    <div class="form-row">
+      <div class="form-group"><label>법령명 검색</label><input type="text" id="val-name" placeholder="법령명 입력..."></div>
+      <button onclick="checkValidity()">검증</button>
+    </div>
+  </div>
+  <div class="card" id="val-results" style="display:none">
+    <div id="val-content"></div>
+  </div>
+  <div class="card">
+    <h2>최근 시행 법령 모니터링</h2>
+    <div class="form-row">
+      <div class="form-group"><label>시도</label><input type="text" id="val-sido" placeholder="예: 세종특별자치시"></div>
+      <button onclick="listRecent()">조회</button>
+    </div>
+    <div id="val-recent"></div>
+  </div>
+</div>
+
+<!-- 6. 인용 그래프 -->
+<div id="panel-graph" class="panel">
+  <div class="card">
+    <h2>가장 많이 인용된 법령 TOP 20</h2>
+    <div id="cited-statutes"></div>
+  </div>
+  <div class="card">
+    <h2>특정 법령을 인용한 판례</h2>
+    <div class="form-row">
+      <div class="form-group"><label>법령 ID</label><input type="number" id="graph-statute-id"></div>
+      <button onclick="citingCases()">조회</button>
+    </div>
+    <div id="citing-cases-result"></div>
+  </div>
+  <div class="card">
+    <h2>인용 네트워크 (노드·엣지)</h2>
+    <div class="form-row">
+      <div class="form-group"><label>시도 필터</label><input type="text" id="net-sido" placeholder="예: 세종특별자치시"></div>
+      <button onclick="loadNetwork()">불러오기</button>
+    </div>
+    <div id="graph-vis">버튼을 눌러 네트워크를 불러오세요</div>
+  </div>
+</div>
+
+<!-- 7. 법령 이력 -->
+<div id="panel-history" class="panel">
+  <div class="card">
+    <h2>법령 조문 이력</h2>
+    <div class="form-row">
+      <div class="form-group"><label>법령 ID</label><input type="number" id="hist-id"></div>
+      <button onclick="loadHistory()">조회</button>
+    </div>
+    <div id="hist-result"></div>
+  </div>
+  <div class="card">
+    <h2>법령 조문 전체 보기</h2>
+    <div class="form-row">
+      <div class="form-group"><label>법령 ID</label><input type="number" id="art-id"></div>
+      <button onclick="loadArticles()">조회</button>
+    </div>
+    <div id="art-result"></div>
+  </div>
+</div>
+
+<!-- 8. 데이터 추출 -->
+<div id="panel-export" class="panel">
+  <div class="card">
+    <h2>판례 데이터 추출</h2>
+    <div class="form-row">
+      <div class="form-group"><label>사건종류</label>
+        <select id="exp-case-type">
+          <option value="">전체</option>
+          <option>민사</option><option>형사</option><option>가사</option>
+          <option>세무</option><option>일반행정</option><option>특허</option><option>기타</option>
+        </select>
+      </div>
+      <button class="export-btn" onclick="exportData('cases','json')">JSON 다운로드</button>
+      <button class="export-btn" onclick="exportData('cases','csv')">CSV 다운로드</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>법령 데이터 추출</h2>
+    <div class="form-row">
+      <div class="form-group"><label>시도</label><input type="text" id="exp-sido" placeholder="예: 광주광역시"></div>
+      <button class="export-btn" onclick="exportData('statutes','json')">JSON 다운로드</button>
+      <button class="export-btn" onclick="exportData('statutes','csv')">CSV 다운로드</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /container -->
+<div id="toast"></div>
+
+<script>
+const API = '';
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'stats') loadStats();
+  if (name === 'graph') loadTopCited();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+async function api(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function badge(text, prefix) {
+  const cls = prefix ? `badge-${text}` : 'badge';
+  return `<span class="badge ${cls}">${text}</span>`;
+}
+
+// ── 판례 검색 ────────────────────────────────
+let casePage = 1;
+async function searchCases(page = 1) {
+  casePage = page;
+  const q = document.getElementById('case-q').value;
+  const type = document.getElementById('case-type').value;
+  const court = document.getElementById('case-court').value;
+  const df = document.getElementById('case-date-from').value;
+  const dt = document.getElementById('case-date-to').value;
+  const params = new URLSearchParams({q,case_type:type,court,date_from:df,date_to:dt,page,size:20});
+  const data = await api(`/cases/search?${params}`);
+
+  document.getElementById('case-results').style.display = 'block';
+  document.getElementById('case-meta').textContent = `총 ${data.total.toLocaleString()}건`;
+  const t = document.getElementById('case-table');
+  t.innerHTML = `<tr><th>사건번호</th><th>사건명</th><th>법원</th><th>종류</th><th>선고일</th><th>판결요지</th><th>출처</th></tr>
+  ${data.items.map(r => `<tr>
+    <td>${r.case_no}</td>
+    <td>${r.case_name}</td>
+    <td>${r.court}</td>
+    <td>${badge(r.case_type, true)}</td>
+    <td>${r.date}</td>
+    <td class="summary" title="${(r.summary||'').replace(/"/g,'')}">${r.summary||''}</td>
+    <td>${r.source_url ? `<a href="${r.source_url}" target="_blank">링크</a>` : ''}</td>
+  </tr>`).join('')}`;
+
+  const totalPages = Math.ceil(data.total / 20);
+  document.getElementById('case-page').innerHTML =
+    `${page > 1 ? `<button onclick="searchCases(${page-1})">이전</button>` : ''}
+     <span>${page} / ${totalPages}</span>
+     ${page < totalPages ? `<button onclick="searchCases(${page+1})">다음</button>` : ''}`;
+}
+
+// ── 법령 검색 ────────────────────────────────
+let stPage = 1;
+async function searchStatutes(page = 1) {
+  stPage = page;
+  const q = document.getElementById('st-q').value;
+  const kind = document.getElementById('st-kind').value;
+  const sido = document.getElementById('st-sido').value;
+  const grade = document.getElementById('st-grade').value;
+  const params = new URLSearchParams({q,kind,sido,trust_grade:grade,page,size:20});
+  const data = await api(`/statutes/search?${params}`);
+
+  document.getElementById('st-results').style.display = 'block';
+  document.getElementById('st-meta').textContent = `총 ${data.total.toLocaleString()}건`;
+  const t = document.getElementById('st-table');
+  t.innerHTML = `<tr><th>ID</th><th>법령명</th><th>종류</th><th>시도</th><th>시군구</th><th>시행일</th><th>신뢰등급</th><th>조문</th></tr>
+  ${data.items.map(r => `<tr>
+    <td>${r.id}</td>
+    <td>${r.name}</td>
+    <td>${r.kind}</td>
+    <td>${r.region_sido||''}</td>
+    <td>${r.region_sigungu||''}</td>
+    <td>${r.effective_from||''}</td>
+    <td>${badge(r.trust_grade, true)}</td>
+    <td><button onclick="quickArticles(${r.id})" style="font-size:.7rem;padding:.2rem .5rem">조문</button></td>
+  </tr>`).join('')}`;
+
+  const totalPages = Math.ceil(data.total / 20);
+  document.getElementById('st-page').innerHTML =
+    `${page > 1 ? `<button onclick="searchStatutes(${page-1})">이전</button>` : ''}
+     <span>${page} / ${totalPages}</span>
+     ${page < totalPages ? `<button onclick="searchStatutes(${page+1})">다음</button>` : ''}`;
+}
+
+async function quickArticles(id) {
+  const data = await api(`/statutes/${id}/articles`);
+  const text = data.articles.map(a => `[${a.article_no} ${a.article_title}]\n${a.content}`).join('\n\n');
+  const w = window.open('', '_blank', 'width=800,height=600');
+  w.document.write(`<pre style="font-family:monospace;padding:1rem;white-space:pre-wrap">${data.statute.name}\n\n${text}</pre>`);
+}
+
+// ── 통계 ────────────────────────────────────
+async function loadStats() {
+  const [sum, byType, byYear, byRegion] = await Promise.all([
+    api('/stats/summary'), api('/stats/cases/by-type'),
+    api('/stats/cases/by-year'), api('/stats/statutes/by-region'),
+  ]);
+  document.getElementById('stat-summary').innerHTML = `
+    <div class="stat-box"><div class="num">${sum.cases.toLocaleString()}</div><div class="lbl">판례</div></div>
+    <div class="stat-box"><div class="num">${sum.statutes.toLocaleString()}</div><div class="lbl">법령</div></div>
+    <div class="stat-box"><div class="num">${sum.articles.toLocaleString()}</div><div class="lbl">조문</div></div>
+    <div class="stat-box"><div class="num">${sum.citation_refs.toLocaleString()}</div><div class="lbl">인용 관계</div></div>`;
+
+  renderBarChart('chart-case-type', byType, 'case_type', 'cnt');
+  const last20 = byYear.slice(-20);
+  renderBarChart('chart-year', last20, 'yr', 'cnt');
+  renderBarChart('chart-region', byRegion, 'region_sido', 'cnt');
+}
+
+function renderBarChart(elId, data, labelKey, valKey) {
+  if (!data.length) return;
+  const max = Math.max(...data.map(d => d[valKey]));
+  document.getElementById(elId).innerHTML = data.map(d => `
+    <div class="chart-bar">
+      <span class="bar-label">${d[labelKey]||'(없음)'}</span>
+      <div class="bar-fill" style="width:${Math.max(4,(d[valKey]/max)*400)}px"></div>
+      <span class="bar-val">${d[valKey].toLocaleString()}</span>
+    </div>`).join('');
+}
+
+// ── 지역 비교 ────────────────────────────────
+async function compareRegions() {
+  const kw = document.getElementById('cmp-keyword').value;
+  if (!kw) return;
+  const data = await api(`/compare/regions?keyword=${encodeURIComponent(kw)}`);
+  document.getElementById('cmp-results').style.display = 'block';
+  const regions = data.regions || {};
+  let html = `<p style="margin-bottom:1rem;font-size:.85rem">총 ${data.total}건</p>`;
+  for (const [sido, items] of Object.entries(regions)) {
+    html += `<h3 style="font-size:.9rem;color:#333;margin:.75rem 0 .4rem">${sido}</h3>
+    <table><tr><th>ID</th><th>법령명</th><th>종류</th><th>시군구</th><th>시행일</th></tr>
+    ${items.map(i=>`<tr><td>${i.id}</td><td>${i.name}</td><td>${i.kind}</td><td>${i.region_sigungu||''}</td><td>${i.effective_from||''}</td></tr>`).join('')}
+    </table>`;
+  }
+  document.getElementById('cmp-content').innerHTML = html;
+}
+
+async function diffStatutes() {
+  const id1 = document.getElementById('diff-id1').value;
+  const id2 = document.getElementById('diff-id2').value;
+  if (!id1 || !id2) return;
+  const data = await api(`/compare/statutes?id1=${id1}&id2=${id2}`);
+  const box = document.getElementById('diff-result');
+  box.style.display = 'block';
+  box.innerHTML = data.diff.split('\n').map(line => {
+    if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+    if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+    return line;
+  }).join('\n');
+}
+
+// ── 유효성 검증 ──────────────────────────────
+async function checkValidity() {
+  const name = document.getElementById('val-name').value;
+  if (!name) return;
+  const data = await api(`/validity/check?name=${encodeURIComponent(name)}`);
+  document.getElementById('val-results').style.display = 'block';
+  document.getElementById('val-content').innerHTML = `
+    <p style="font-size:.8rem;margin-bottom:.75rem">검증일: ${data.checked_at}</p>
+    <table><tr><th>법령명</th><th>종류</th><th>시도</th><th>시행일</th><th>신뢰등급</th><th>상태</th></tr>
+    ${data.items.map(i=>`<tr>
+      <td>${i.name}</td><td>${i.kind}</td><td>${i.region_sido||''}</td>
+      <td>${i.effective_from||''}</td><td>${badge(i.trust_grade,true)}</td>
+      <td>${badge(i.status,true)}</td>
+    </tr>`).join('')}
+    </table>`;
+}
+
+async function listRecent() {
+  const sido = document.getElementById('val-sido').value;
+  const data = await api(`/validity/expired?sido=${encodeURIComponent(sido)}&limit=30`);
+  document.getElementById('val-recent').innerHTML = `
+    <table style="margin-top:.75rem"><tr><th>ID</th><th>법령명</th><th>종류</th><th>시도</th><th>시행일</th><th>신뢰</th></tr>
+    ${data.map(r=>`<tr><td>${r.id}</td><td>${r.name}</td><td>${r.kind}</td>
+    <td>${r.region_sido||''}</td><td>${r.effective_from}</td><td>${badge(r.trust_grade,true)}</td></tr>`).join('')}
+    </table>`;
+}
+
+// ── 인용 그래프 ──────────────────────────────
+async function loadTopCited() {
+  const data = await api('/graph/top-cited-statutes?limit=20');
+  const max = data[0]?.cnt || 1;
+  document.getElementById('cited-statutes').innerHTML = data.map(r=>`
+    <div class="chart-bar">
+      <span class="bar-label" style="min-width:200px" title="${r.name}">${r.name.slice(0,22)}${r.name.length>22?'…':''}</span>
+      <div class="bar-fill" style="width:${Math.max(4,(r.cnt/max)*300)}px"></div>
+      <span class="bar-val">${r.cnt}건 (ID:${r.id})</span>
+    </div>`).join('');
+}
+
+async function citingCases() {
+  const id = document.getElementById('graph-statute-id').value;
+  if (!id) return;
+  const data = await api(`/graph/statute/${id}/citing-cases`);
+  document.getElementById('citing-cases-result').innerHTML = `
+    <p style="font-size:.8rem;margin:.75rem 0 .5rem">총 ${data.total}건</p>
+    <table><tr><th>사건번호</th><th>사건명</th><th>법원</th><th>종류</th><th>선고일</th></tr>
+    ${data.items.map(r=>`<tr><td>${r.case_no}</td><td>${r.case_name}</td>
+    <td>${r.court}</td><td>${badge(r.case_type,true)}</td><td>${r.date}</td></tr>`).join('')}
+    </table>`;
+}
+
+async function loadNetwork() {
+  const sido = document.getElementById('net-sido').value;
+  const data = await api(`/graph/network?sido=${encodeURIComponent(sido)}&limit=50`);
+  const vis = document.getElementById('graph-vis');
+  if (!data.nodes.length) { vis.textContent = '데이터 없음'; return; }
+  const statutes = data.nodes.filter(n=>n.type==='statute');
+  const cases = data.nodes.filter(n=>n.type==='case');
+  vis.innerHTML = `
+    <div style="padding:1rem;width:100%">
+      <p style="color:#aaa;font-size:.8rem;margin-bottom:.75rem">노드 ${data.nodes.length}개 / 엣지 ${data.edges.length}개</p>
+      <p style="color:#81c784;font-size:.8rem;margin-bottom:.4rem">법령 (${statutes.length})</p>
+      <div class="node-list">${statutes.map(n=>`<span class="node-chip statute">${n.label.slice(0,20)}</span>`).join('')}</div>
+      <p style="color:#e57373;font-size:.8rem;margin:.75rem 0 .4rem">판례 (${cases.length})</p>
+      <div class="node-list">${cases.map(n=>`<span class="node-chip case">${n.label.slice(0,20)}</span>`).join('')}</div>
+    </div>`;
+}
+
+// ── 법령 이력 ────────────────────────────────
+async function loadHistory() {
+  const id = document.getElementById('hist-id').value;
+  if (!id) return;
+  const data = await api(`/statutes/${id}/history`);
+  document.getElementById('hist-result').innerHTML = `
+    <table style="margin-top:.75rem">
+      <tr><th>항목</th><th>값</th></tr>
+      <tr><td>법령명</td><td>${data.name}</td></tr>
+      <tr><td>공포일</td><td>${data.current_version.promulgated_on||'-'}</td></tr>
+      <tr><td>시행일</td><td>${data.current_version.effective_from||'-'}</td></tr>
+      <tr><td>개정구분</td><td>${data.current_version.estrev_label||'-'}</td></tr>
+      <tr><td>버전 수</td><td>${data.current_version.version_count}</td></tr>
+      <tr><td>원본</td><td><a href="${data.source_url}" target="_blank">law.go.kr</a></td></tr>
+    </table>`;
+}
+
+async function loadArticles() {
+  const id = document.getElementById('art-id').value;
+  if (!id) return;
+  const data = await api(`/statutes/${id}/articles`);
+  document.getElementById('art-result').innerHTML = `
+    <p style="font-size:.85rem;font-weight:600;margin:.75rem 0 .5rem">${data.statute.name}</p>
+    ${data.articles.map(a=>`
+      <div style="border-left:3px solid #4fc3f7;padding:.5rem .75rem;margin-bottom:.6rem">
+        <div style="font-size:.8rem;font-weight:600;color:#333">${a.article_no} ${a.article_title}</div>
+        <div style="font-size:.8rem;color:#555;margin-top:.3rem;white-space:pre-wrap">${a.content}</div>
+      </div>`).join('')}`;
+}
+
+// ── 데이터 추출 ──────────────────────────────
+async function exportData(type, fmt) {
+  let url;
+  if (type === 'cases') {
+    const ct = document.getElementById('exp-case-type').value;
+    url = `/stats/export/cases?case_type=${encodeURIComponent(ct)}&fmt=${fmt}`;
+  } else {
+    const sido = document.getElementById('exp-sido').value;
+    url = `/stats/export/statutes?sido=${encodeURIComponent(sido)}&fmt=${fmt}`;
+  }
+  if (fmt === 'csv') {
+    window.location.href = url;
+  } else {
+    const data = await api(url);
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${type}.json`;
+    a.click();
+  }
+  toast('다운로드 시작');
+}
+
+// ── 초기화 ────────────────────────────────────
+(async () => {
+  try {
+    const s = await api('/stats/summary');
+    document.getElementById('db-summary').textContent =
+      `판례 ${s.cases.toLocaleString()}건 · 법령 ${s.statutes.toLocaleString()}건 · 조문 ${s.articles.toLocaleString()}개`;
+  } catch(e) { document.getElementById('db-summary').textContent = 'DB 연결 중...'; }
+})();
+</script>
+</body>
+</html>
