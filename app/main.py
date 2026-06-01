@@ -103,3 +103,20 @@ def finalize_db(x_upload_token: str = Header(...)):
     os.replace(tmp, db_path)
     size_mb = os.path.getsize(db_path) / 1024 / 1024
     return {"status": "ok", "chunks": len(chunks), "size_mb": round(size_mb, 1)}
+
+
+@app.post("/admin/fetch-db", include_in_schema=False)
+def fetch_db(body: dict, x_upload_token: str = Header(...)):
+    """외부 URL에서 DB 파일을 직접 다운로드"""
+    import urllib.request
+    _check_token(x_upload_token)
+    url = body.get("url", "")
+    if not url:
+        raise HTTPException(400, "url 필드가 필요합니다")
+    db_path = os.environ.get("DB_PATH", "data/law.db")
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    tmp = db_path + ".tmp"
+    urllib.request.urlretrieve(url, tmp)
+    os.replace(tmp, db_path)
+    size_mb = os.path.getsize(db_path) / 1024 / 1024
+    return {"status": "ok", "size_mb": round(size_mb, 1)}
