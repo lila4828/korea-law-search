@@ -33,25 +33,29 @@ def health():
 
 @app.get("/admin/diag", include_in_schema=False)
 def diag():
+    import shutil, subprocess
     db_path = os.environ.get("DB_PATH", "data/law.db")
     data_dir = os.path.dirname(db_path) or "."
-    try:
-        test_file = os.path.join(data_dir, ".write_test")
-        with open(test_file, "w") as f:
-            f.write("ok")
-        os.remove(test_file)
-        writable = True
-    except Exception as e:
-        writable = str(e)
+    tmp_path = db_path + ".tmp"
+
+    disk = shutil.disk_usage(data_dir)
+    files = []
+    if os.path.exists(data_dir):
+        for f in os.listdir(data_dir):
+            p = os.path.join(data_dir, f)
+            files.append({"name": f, "size_mb": round(os.path.getsize(p) / 1024 / 1024, 1)})
+
     return {
         "db_path": db_path,
-        "data_dir": data_dir,
         "data_dir_exists": os.path.exists(data_dir),
-        "data_dir_writable": writable,
         "db_exists": os.path.exists(db_path),
         "db_size_mb": round(os.path.getsize(db_path) / 1024 / 1024, 1) if os.path.exists(db_path) else 0,
-        "cwd": os.getcwd(),
-        "ls_app": os.listdir("/app") if os.path.exists("/app") else [],
+        "tmp_exists": os.path.exists(tmp_path),
+        "tmp_size_mb": round(os.path.getsize(tmp_path) / 1024 / 1024, 1) if os.path.exists(tmp_path) else 0,
+        "disk_total_gb": round(disk.total / 1024**3, 2),
+        "disk_used_gb": round(disk.used / 1024**3, 2),
+        "disk_free_gb": round(disk.free / 1024**3, 2),
+        "files": files,
     }
 
 
