@@ -174,8 +174,16 @@
     <div class="stat-grid" id="stat-summary"></div>
   </div>
   <div class="card">
+    <h2>본문 데이터 보유율</h2>
+    <div class="stat-grid" id="stat-coverage"></div>
+  </div>
+  <div class="card">
     <h2>사건종류별 판례</h2>
     <div id="chart-case-type"></div>
+  </div>
+  <div class="card">
+    <h2>심급별 판례</h2>
+    <div id="chart-court-level"></div>
   </div>
   <div class="card">
     <h2>연도별 판례 추이</h2>
@@ -237,6 +245,10 @@
   <div class="card">
     <h2>가장 많이 인용된 법령 TOP 20</h2>
     <div id="cited-statutes"></div>
+  </div>
+  <div class="card">
+    <h2>가장 많이 인용된 판례 TOP 20 <span style="font-size:.7rem;color:#999;font-weight:400">(참조판례 기반)</span></h2>
+    <div id="cited-cases"></div>
   </div>
   <div class="card">
     <h2>특정 법령을 인용한 판례</h2>
@@ -319,7 +331,7 @@ function switchTab(name) {
   event.target.classList.add('active');
   document.getElementById('panel-' + name).classList.add('active');
   if (name === 'stats') loadStats();
-  if (name === 'graph') loadTopCited();
+  if (name === 'graph') { loadTopCited(); loadTopCitedCases(); }
 }
 
 function toast(msg) {
@@ -415,31 +427,53 @@ async function quickArticles(id) {
   w.document.write(`<pre style="font-family:monospace;padding:1rem;white-space:pre-wrap">${data.statute.name}\n\n${text}</pre>`);
 }
 
-// ── 판례 상세 (본문·판시사항·참조조문) ──────────
+// ── 판례 상세 (본문·판시사항·참조조문·인용·유사) ──────────
 async function viewCase(id) {
-  const d = await api(`/cases/${id}`);
+  const [d, cites, citedBy, sim] = await Promise.all([
+    api(`/cases/${id}`),
+    api(`/graph/case/${id}/cites`).catch(() => ({items: []})),
+    api(`/graph/case/${id}/cited-by?size=10`).catch(() => ({total: 0, items: []})),
+    api(`/cases/${id}/similar?limit=8`).catch(() => ({items: []})),
+  ]);
   const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const sec = (title, val) => val ? `<h2>${title}</h2><pre>${esc(val)}</pre>` : '';
-  const w = window.open('', '_blank', 'width=920,height=720');
+  // 클릭 시 같은 창에서 해당 판례 열기
+  const link = (cid, label) => cid
+    ? `<a href="#" onclick="window.opener.viewCase(${cid});return false">${esc(label)}</a>`
+    : `<span style="color:#888">${esc(label)} (미수록)</span>`;
+  const caseList = (items, getId, getLabel) => items.length
+    ? `<ul style="margin:.3rem 0 0 1.1rem;font-size:.85rem;line-height:1.7">${
+        items.map(i => `<li>${link(getId(i), getLabel(i))}</li>`).join('')}</ul>`
+    : '<p style="color:#999;font-size:.85rem">없음</p>';
+
+  const w = window.open('', 'caseView', 'width=940,height=760');
+  w.document.open();
   w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
     <title>${esc(d.case_name)}</title>
     <style>
-      body{font-family:'Noto Sans KR',system-ui,sans-serif;padding:1.8rem;line-height:1.65;color:#1a1a2e;max-width:840px;margin:0 auto;background:#fff}
+      body{font-family:'Noto Sans KR',system-ui,sans-serif;padding:1.8rem;line-height:1.65;color:#1a1a2e;max-width:860px;margin:0 auto;background:#fff}
       h1{font-size:1.25rem;margin-bottom:.5rem}
       .meta{font-size:.82rem;color:#666;margin-bottom:1.2rem;padding-bottom:.8rem;border-bottom:1px solid #eee}
       h2{font-size:.95rem;color:#16213e;border-left:3px solid #4fc3f7;padding-left:.6rem;margin:1.4rem 0 .6rem}
       pre{white-space:pre-wrap;font-family:inherit;font-size:.9rem;color:#333}
-      a{color:#0d7377}
+      a{color:#0d7377;cursor:pointer} mark{background:#fff59d}
     </style></head><body>
     <h1>${esc(d.case_name)}</h1>
     <div class="meta">${esc(d.case_no)} · ${esc(d.court)} · ${esc(d.date)} · ${esc(d.case_type)}
       ${d.source_url ? ` · <a href="${d.source_url}" target="_blank">law.go.kr 원문</a>` : ''}</div>
+    <h2>이 판례가 인용한 판례 (${cites.items.length})</h2>
+    ${caseList(cites.items, i => i.cited_id, i => i.case_name ? `${i.cited_case_no} ${i.case_name}` : i.cited_case_no)}
+    <h2>이 판례를 인용한 판례 (${citedBy.total})</h2>
+    ${caseList(citedBy.items, i => i.id, i => `${i.case_no} ${i.case_name}`)}
+    <h2>유사 판례</h2>
+    ${caseList(sim.items, i => i.id, i => `${i.case_no} ${i.case_name}`)}
     ${sec('판시사항', d.issues)}
     ${sec('판결요지', d.summary)}
     ${sec('참조조문', d.ref_text)}
     ${sec('판례내용', d.body) || '<p style="color:#999">본문이 없습니다.</p>'}
     </body></html>`);
   w.document.close();
+  w.focus();
 }
 
 // ── 통계 ────────────────────────────────────
@@ -458,6 +492,17 @@ async function loadStats() {
   const last20 = byYear.slice(-20);
   renderBarChart('chart-year', last20, 'yr', 'cnt');
   renderBarChart('chart-region', byRegion, 'region_sido', 'cnt');
+
+  const [byLevel, cov] = await Promise.all([
+    api('/stats/cases/by-court-level'), api('/stats/cases/content-coverage'),
+  ]);
+  renderBarChart('chart-court-level', byLevel, 'court_level', 'cnt');
+  const pct = o => `${(o.ratio*100).toFixed(0)}%`;
+  document.getElementById('stat-coverage').innerHTML = `
+    <div class="stat-box"><div class="num">${pct(cov.body)}</div><div class="lbl">본문 (${cov.body.count.toLocaleString()})</div></div>
+    <div class="stat-box"><div class="num">${pct(cov.issues)}</div><div class="lbl">판시사항</div></div>
+    <div class="stat-box"><div class="num">${pct(cov.ref_text)}</div><div class="lbl">참조조문</div></div>
+    <div class="stat-box"><div class="num">${cov.avg_body_length.toLocaleString()}</div><div class="lbl">평균 본문 길이(자)</div></div>`;
 }
 
 function renderBarChart(elId, data, labelKey, valKey) {
@@ -538,6 +583,21 @@ async function loadTopCited() {
       <span class="bar-label" style="min-width:200px" title="${r.name}">${r.name.slice(0,22)}${r.name.length>22?'…':''}</span>
       <div class="bar-fill" style="width:${Math.max(4,(r.cnt/max)*300)}px"></div>
       <span class="bar-val">${r.cnt}건 (ID:${r.id})</span>
+    </div>`).join('');
+}
+
+async function loadTopCitedCases() {
+  const data = await api('/graph/top-cited-cases?limit=20');
+  const el = document.getElementById('cited-cases');
+  if (!data.length) { el.innerHTML = '<p style="color:#999;font-size:.85rem">인용 데이터 없음</p>'; return; }
+  const max = data[0]?.cnt || 1;
+  el.innerHTML = data.map(r => `
+    <div class="chart-bar">
+      <span class="bar-label" style="min-width:230px" title="${r.case_name}">
+        <a href="#" onclick="viewCase(${r.id});return false" style="color:#0d7377">${r.case_no} ${r.case_name.slice(0,16)}${r.case_name.length>16?'…':''}</a>
+      </span>
+      <div class="bar-fill" style="width:${Math.max(4,(r.cnt/max)*280)}px;background:#e57373"></div>
+      <span class="bar-val">${r.cnt}회</span>
     </div>`).join('');
 }
 

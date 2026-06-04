@@ -57,6 +57,62 @@ def cited_statutes(case_id: int):
     return [dict(r) for r in rows]
 
 
+@router.get("/top-cited-cases")
+def top_cited_cases(limit: int = Query(20, le=100)):
+    """가장 많이 인용된 판례 순위 (참조판례 기반)"""
+    rows = db().execute(
+        """SELECT c.id, c.case_no, c.case_name, c.court, c.case_type, c.date,
+                  COUNT(*) cnt
+           FROM case_case_refs r
+           JOIN cases c ON c.id = r.cited_id
+           WHERE r.cited_id IS NOT NULL
+           GROUP BY r.cited_id
+           ORDER BY cnt DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/case/{case_id}/cites")
+def case_cites(case_id: int):
+    """이 판례가 인용한 판례 목록 (참조판례). 우리 DB에 없는 건 cited_id=null"""
+    rows = db().execute(
+        """SELECT r.cited_case_no, r.cited_id,
+                  c.case_name, c.court, c.case_type, c.date
+           FROM case_case_refs r
+           LEFT JOIN cases c ON c.id = r.cited_id
+           WHERE r.citing_id = ?
+           ORDER BY r.cited_id IS NULL, c.date DESC""",
+        (case_id,),
+    ).fetchall()
+    return {"case_id": case_id, "total": len(rows), "items": [dict(r) for r in rows]}
+
+
+@router.get("/case/{case_id}/cited-by")
+def case_cited_by(
+    case_id: int,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, le=100),
+):
+    """이 판례를 인용한 판례 목록"""
+    conn = db()
+    offset = (page - 1) * size
+    total = conn.execute(
+        "SELECT COUNT(*) FROM case_case_refs WHERE cited_id = ?", (case_id,)
+    ).fetchone()[0]
+    rows = conn.execute(
+        """SELECT c.id, c.case_no, c.case_name, c.court, c.case_type, c.date
+           FROM case_case_refs r
+           JOIN cases c ON c.id = r.citing_id
+           WHERE r.cited_id = ?
+           ORDER BY c.date DESC
+           LIMIT ? OFFSET ?""",
+        (case_id, size, offset),
+    ).fetchall()
+    return {"total": total, "page": page, "size": size, "items": [dict(r) for r in rows]}
+
+
 @router.get("/network")
 def citation_network(
     sido: str = Query("", description="시도 필터"),

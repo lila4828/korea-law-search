@@ -48,6 +48,40 @@ def cases_by_court():
     return [dict(r) for r in rows]
 
 
+@router.get("/cases/by-court-level")
+def cases_by_court_level():
+    """심급별 판례 수"""
+    rows = db().execute(
+        "SELECT court_level, COUNT(*) cnt FROM cases GROUP BY court_level ORDER BY cnt DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/cases/content-coverage")
+def cases_content_coverage():
+    """판례 본문/판시사항/참조조문 보유율 + 평균 본문 길이"""
+    conn = db()
+    total = conn.execute("SELECT COUNT(*) FROM cases").fetchone()[0]
+
+    def cov(col):
+        n = conn.execute(
+            f"SELECT COUNT(*) FROM cases WHERE {col} IS NOT NULL AND {col}!=''"
+        ).fetchone()[0]
+        return {"count": n, "ratio": round(n / total, 3)}
+
+    avg_body = conn.execute(
+        "SELECT AVG(LENGTH(body)) FROM cases WHERE body IS NOT NULL AND body!=''"
+    ).fetchone()[0]
+    return {
+        "total": total,
+        "body": cov("body"),
+        "issues": cov("issues"),
+        "ref_text": cov("ref_text"),
+        "summary": cov("summary"),
+        "avg_body_length": round(avg_body or 0),
+    }
+
+
 @router.get("/statutes/by-region")
 def statutes_by_region():
     rows = db().execute(
