@@ -107,6 +107,9 @@ def init_db(conn: sqlite3.Connection):
             case_type   TEXT,
             date        TEXT,
             summary     TEXT,
+            issues      TEXT,
+            ref_text    TEXT,
+            body        TEXT,
             source_url  TEXT
         );
 
@@ -155,7 +158,7 @@ def init_db(conn: sqlite3.Connection):
 def create_fts(conn: sqlite3.Connection):
     conn.executescript("""
         CREATE VIRTUAL TABLE IF NOT EXISTS cases_fts USING fts5(
-            case_no, case_name, summary,
+            case_no, case_name, summary, issues, body,
             content=cases, content_rowid=id,
             tokenize='unicode61'
         );
@@ -170,6 +173,12 @@ def create_fts(conn: sqlite3.Connection):
     conn.commit()
 
 
+def _section(text: str, title: str) -> str:
+    """## {title} 섹션 본문 추출 (다음 ## 또는 문서 끝까지)"""
+    m = re.search(rf"##\s*{title}\s*\n+(.*?)(?=\n##|\Z)", text, re.DOTALL)
+    return m.group(1).strip() if m else ""
+
+
 def parse_case_md(text: str) -> dict:
     """YAML frontmatter + Markdown 판례 파싱"""
     meta = {}
@@ -182,11 +191,6 @@ def parse_case_md(text: str) -> dict:
                     meta[k.strip()] = v.strip().strip("'\"")
             text = text[end + 3:]
 
-    summary = ""
-    m = re.search(r"##\s*판결요지\s*\n+(.*?)(?=\n##|\Z)", text, re.DOTALL)
-    if m:
-        summary = m.group(1).strip()[:2000]
-
     return {
         "seq_no":      meta.get("판례일련번호", ""),
         "case_no":     meta.get("사건번호", ""),
@@ -195,7 +199,10 @@ def parse_case_md(text: str) -> dict:
         "court_level": meta.get("법원등급", ""),
         "case_type":   meta.get("사건종류", ""),
         "date":        meta.get("선고일자", ""),
-        "summary":     summary,
+        "summary":     _section(text, "판결요지"),
+        "issues":      _section(text, "판시사항"),
+        "ref_text":    _section(text, "참조조문"),
+        "body":        _section(text, "판례내용"),
         "source_url":  meta.get("출처", ""),
     }
 
@@ -226,8 +233,8 @@ def ingest_cases(conn: sqlite3.Connection, zip_path: str):
 def _insert_cases(conn: sqlite3.Connection, rows: list):
     conn.executemany(
         """INSERT OR IGNORE INTO cases
-           (seq_no,case_no,case_name,court,court_level,case_type,date,summary,source_url)
-           VALUES (:seq_no,:case_no,:case_name,:court,:court_level,:case_type,:date,:summary,:source_url)""",
+           (seq_no,case_no,case_name,court,court_level,case_type,date,summary,issues,ref_text,body,source_url)
+           VALUES (:seq_no,:case_no,:case_name,:court,:court_level,:case_type,:date,:summary,:issues,:ref_text,:body,:source_url)""",
         rows,
     )
     conn.commit()
@@ -378,17 +385,21 @@ def ingest_statutes(conn: sqlite3.Connection, zip_path: str, label: str):
 
 
 def build_citation_graph(conn: sqlite3.Connection):
-    """판례 summary에서 법령명 추출 → case_statute_refs 구성"""
+    """판례 참조조문/판결요지에서 법령명 추출 → case_statute_refs 구성"""
     print("[인용 그래프 구성 중...]")
     statute_names = {
         row[0]: row[1]
         for row in conn.execute("SELECT id, name FROM statutes WHERE name != ''")
     }
-    cases = conn.execute("SELECT id, summary FROM cases WHERE summary != ''").fetchall()
+    # 참조조문 섹션이 인용 정보의 1차 출처. 비어있으면 판결요지로 보완
+    cases = conn.execute(
+        "SELECT id, COALESCE(NULLIF(ref_text,''), summary) FROM cases "
+        "WHERE COALESCE(NULLIF(ref_text,''), summary) != ''"
+    ).fetchall()
     batch = []
-    for case_id, summary in cases:
+    for case_id, ref in cases:
         for sid, sname in statute_names.items():
-            if len(sname) > 4 and sname in summary:
+            if len(sname) > 4 and sname in ref:
                 batch.append((case_id, sid, 1))
         if len(batch) >= 1000:
             conn.executemany(
