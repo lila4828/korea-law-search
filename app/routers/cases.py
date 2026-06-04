@@ -22,9 +22,10 @@ def search_cases(
     if q:
         sql = """
             SELECT c.id,c.case_no,c.case_name,c.court,c.court_level,
-                   c.case_type,c.date,c.summary,c.source_url
-            FROM cases_fts f
-            JOIN cases c ON c.id = f.rowid
+                   c.case_type,c.date,c.summary,c.source_url,
+                   snippet(cases_fts,-1,'<mark>','</mark>','…',15) AS snippet
+            FROM cases_fts
+            JOIN cases c ON c.id = cases_fts.rowid
             WHERE cases_fts MATCH ?
         """
         params.append(q)

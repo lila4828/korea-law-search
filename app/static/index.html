@@ -120,7 +120,7 @@
   <div class="card">
     <h2>판례 검색</h2>
     <div class="form-row">
-      <div class="form-group"><label>검색어</label><input type="text" id="case-q" placeholder="판결요지 전문 검색..."></div>
+      <div class="form-group"><label>검색어</label><input type="text" id="case-q" placeholder="본문·판시사항·요지 전문 검색..."></div>
       <div class="form-group"><label>사건종류</label>
         <select id="case-type">
           <option value="">전체</option>
@@ -288,6 +288,11 @@
           <option>세무</option><option>일반행정</option><option>특허</option><option>기타</option>
         </select>
       </div>
+      <div class="form-group"><label>본문 포함</label>
+        <label style="font-size:.8rem;font-weight:400;display:flex;align-items:center;gap:.35rem;padding:.5rem 0">
+          <input type="checkbox" id="exp-include-body" style="width:auto;min-width:0"> 판시사항·참조조문·본문
+        </label>
+      </div>
       <button class="export-btn" onclick="exportData('cases','json')">JSON 다운로드</button>
       <button class="export-btn" onclick="exportData('cases','csv')">CSV 다운로드</button>
     </div>
@@ -349,15 +354,18 @@ async function searchCases(page = 1) {
   document.getElementById('case-results').style.display = 'block';
   document.getElementById('case-meta').textContent = `총 ${data.total.toLocaleString()}건`;
   const t = document.getElementById('case-table');
-  t.innerHTML = `<tr><th>사건번호</th><th>사건명</th><th>법원</th><th>종류</th><th>선고일</th><th>판결요지</th><th>출처</th></tr>
+  t.innerHTML = `<tr><th>사건번호</th><th>사건명</th><th>법원</th><th>종류</th><th>선고일</th><th>본문/요지</th><th>보기</th></tr>
   ${data.items.map(r => `<tr>
     <td>${r.case_no}</td>
     <td>${r.case_name}</td>
     <td>${r.court}</td>
     <td>${badge(r.case_type, true)}</td>
     <td>${r.date}</td>
-    <td class="summary" title="${(r.summary||'').replace(/"/g,'')}">${r.summary||''}</td>
-    <td>${r.source_url ? `<a href="${r.source_url}" target="_blank">링크</a>` : ''}</td>
+    <td style="max-width:420px;font-size:.8rem;color:#555;white-space:normal">${r.snippet || (r.summary||'').slice(0,160) || '<span style="color:#bbb">(요지 없음)</span>'}</td>
+    <td style="white-space:nowrap">
+      <button onclick="viewCase(${r.id})" class="secondary" style="font-size:.7rem;padding:.25rem .55rem">상세</button>
+      ${r.source_url ? `<a href="${r.source_url}" target="_blank" style="margin-left:.4rem">원문</a>` : ''}
+    </td>
   </tr>`).join('')}`;
 
   const totalPages = Math.ceil(data.total / 20);
@@ -405,6 +413,33 @@ async function quickArticles(id) {
   const text = data.articles.map(a => `[${a.article_no} ${a.article_title}]\n${a.content}`).join('\n\n');
   const w = window.open('', '_blank', 'width=800,height=600');
   w.document.write(`<pre style="font-family:monospace;padding:1rem;white-space:pre-wrap">${data.statute.name}\n\n${text}</pre>`);
+}
+
+// ── 판례 상세 (본문·판시사항·참조조문) ──────────
+async function viewCase(id) {
+  const d = await api(`/cases/${id}`);
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const sec = (title, val) => val ? `<h2>${title}</h2><pre>${esc(val)}</pre>` : '';
+  const w = window.open('', '_blank', 'width=920,height=720');
+  w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+    <title>${esc(d.case_name)}</title>
+    <style>
+      body{font-family:'Noto Sans KR',system-ui,sans-serif;padding:1.8rem;line-height:1.65;color:#1a1a2e;max-width:840px;margin:0 auto;background:#fff}
+      h1{font-size:1.25rem;margin-bottom:.5rem}
+      .meta{font-size:.82rem;color:#666;margin-bottom:1.2rem;padding-bottom:.8rem;border-bottom:1px solid #eee}
+      h2{font-size:.95rem;color:#16213e;border-left:3px solid #4fc3f7;padding-left:.6rem;margin:1.4rem 0 .6rem}
+      pre{white-space:pre-wrap;font-family:inherit;font-size:.9rem;color:#333}
+      a{color:#0d7377}
+    </style></head><body>
+    <h1>${esc(d.case_name)}</h1>
+    <div class="meta">${esc(d.case_no)} · ${esc(d.court)} · ${esc(d.date)} · ${esc(d.case_type)}
+      ${d.source_url ? ` · <a href="${d.source_url}" target="_blank">law.go.kr 원문</a>` : ''}</div>
+    ${sec('판시사항', d.issues)}
+    ${sec('판결요지', d.summary)}
+    ${sec('참조조문', d.ref_text)}
+    ${sec('판례내용', d.body) || '<p style="color:#999">본문이 없습니다.</p>'}
+    </body></html>`);
+  w.document.close();
 }
 
 // ── 통계 ────────────────────────────────────
@@ -570,7 +605,8 @@ async function exportData(type, fmt) {
   let url;
   if (type === 'cases') {
     const ct = document.getElementById('exp-case-type').value;
-    url = `/stats/export/cases?case_type=${encodeURIComponent(ct)}&fmt=${fmt}`;
+    const ib = document.getElementById('exp-include-body').checked;
+    url = `/stats/export/cases?case_type=${encodeURIComponent(ct)}&fmt=${fmt}&include_body=${ib}`;
   } else {
     const sido = document.getElementById('exp-sido').value;
     url = `/stats/export/statutes?sido=${encodeURIComponent(sido)}&fmt=${fmt}`;

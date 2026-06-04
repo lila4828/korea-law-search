@@ -77,10 +77,14 @@ def recent_statutes(limit: int = Query(20, le=100)):
 def export_cases(
     case_type: str = Query("", description="사건종류 필터"),
     fmt: str = Query("json", description="json|csv"),
+    include_body: bool = Query(False, description="판시사항·참조조문·본문 포함"),
 ):
     """기능 10 — 판례 데이터 CSV/JSON 추출"""
     conn = db()
-    sql = "SELECT id,case_no,case_name,court,court_level,case_type,date,source_url FROM cases"
+    cols = "id,case_no,case_name,court,court_level,case_type,date,source_url"
+    if include_body:
+        cols += ",summary,issues,ref_text,body"
+    sql = f"SELECT {cols} FROM cases"
     params = []
     if case_type:
         sql += " WHERE case_type = ?"
