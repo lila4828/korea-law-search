@@ -121,6 +121,19 @@
     <h2>판례 검색</h2>
     <div class="form-row">
       <div class="form-group"><label>검색어</label><input type="text" id="case-q" placeholder="본문·판시사항·요지 전문 검색..."></div>
+      <div class="form-group"><label>예시 검색어</label>
+        <select id="case-examples" onchange="if(this.value){document.getElementById('case-q').value=this.value;searchCases(1);}">
+          <option value="">무엇을 검색할지 모르겠다면…</option>
+          <option>음주운전</option>
+          <option>부당해고</option>
+          <option>임대차보증금</option>
+          <option>손해배상</option>
+          <option>교통사고</option>
+          <option>상속재산</option>
+          <option>이혼 위자료</option>
+          <option>명예훼손</option>
+        </select>
+      </div>
       <div class="form-group"><label>사건종류</label>
         <select id="case-type">
           <option value="">전체</option>
@@ -147,6 +160,17 @@
     <h2>법령 검색</h2>
     <div class="form-row">
       <div class="form-group"><label>검색어</label><input type="text" id="st-q" placeholder="법령명 또는 조문 내용..."></div>
+      <div class="form-group"><label>예시 검색어</label>
+        <select id="st-examples" onchange="if(this.value){document.getElementById('st-q').value=this.value;searchStatutes(1);}">
+          <option value="">무엇을 검색할지 모르겠다면…</option>
+          <option>공유재산</option>
+          <option>주차장</option>
+          <option>보조금</option>
+          <option>민원</option>
+          <option>환경</option>
+          <option>건축</option>
+        </select>
+      </div>
       <div class="form-group"><label>종류</label>
         <select id="st-kind">
           <option value="">전체</option>
