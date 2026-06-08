@@ -19,6 +19,22 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 DB_PATH = os.environ.get("DB_PATH", "data/medilaw.db")
 
 
+# 의료 도메인 전환 — 부팅 시 볼륨에 남은 옛 전국 DB(law.db 계열) 1회성 정리.
+# law.db* 만 대상으로 고정(임의 삭제 아님). 파일이 없으면 조용히 통과 → 이후 무해한 no-op.
+def _cleanup_legacy_db():
+    data_dir = os.path.dirname(DB_PATH) or "."
+    for name in ("law.db", "law.db-wal", "law.db-shm"):
+        p = os.path.join(data_dir, name)
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except OSError:
+            pass
+
+
+_cleanup_legacy_db()
+
+
 @app.get("/health")
 def health():
     return {
