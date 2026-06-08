@@ -106,8 +106,6 @@
   <button class="tab-btn active" onclick="switchTab('search-case')">판례 검색</button>
   <button class="tab-btn" onclick="switchTab('search-statute')">법령 검색</button>
   <button class="tab-btn" onclick="switchTab('stats')">통계 분석</button>
-  <button class="tab-btn" onclick="switchTab('compare')">지역 비교</button>
-  <button class="tab-btn" onclick="switchTab('validity')">유효성 검증</button>
   <button class="tab-btn" onclick="switchTab('graph')">인용 그래프</button>
   <button class="tab-btn" onclick="switchTab('history')">법령 이력</button>
   <button class="tab-btn" onclick="switchTab('export')">데이터 추출</button>
@@ -174,12 +172,9 @@
       <div class="form-group"><label>종류</label>
         <select id="st-kind">
           <option value="">전체</option>
-          <option>예규</option><option>훈령</option><option>고시</option><option>지침</option>
+          <option>법률</option><option>대통령령</option><option>총리령</option><option>부령</option>
+          <option>고시</option><option>훈령</option><option>예규</option>
         </select>
-      </div>
-      <div class="form-group"><label>시도</label><input type="text" id="st-sido" placeholder="예: 광주광역시"></div>
-      <div class="form-group"><label>신뢰등급</label>
-        <select id="st-grade"><option value="">전체</option><option>A</option><option>B</option><option>C</option></select>
       </div>
       <button onclick="searchStatutes(1)">검색</button>
     </div>
@@ -214,70 +209,21 @@
     <div id="chart-year"></div>
   </div>
   <div class="card">
-    <h2>지역별 법령 수</h2>
+    <h2>소관부처별 법령 수</h2>
     <div id="chart-region"></div>
   </div>
 </div>
 
-<!-- 4. 지역 비교 -->
-<div id="panel-compare" class="panel">
-  <div class="card">
-    <h2>지역 법령 비교</h2>
-    <div class="form-row">
-      <div class="form-group"><label>키워드</label><input type="text" id="cmp-keyword" placeholder="예: 직소민원, 공유재산"></div>
-      <button onclick="compareRegions()">비교</button>
-    </div>
-  </div>
-  <div class="card" id="cmp-results" style="display:none">
-    <div id="cmp-content"></div>
-  </div>
-  <div class="card">
-    <h2>조문 텍스트 Diff</h2>
-    <div class="form-row">
-      <div class="form-group"><label>법령 ID 1</label><input type="number" id="diff-id1" placeholder="ID"></div>
-      <div class="form-group"><label>법령 ID 2</label><input type="number" id="diff-id2" placeholder="ID"></div>
-      <button onclick="diffStatutes()">비교</button>
-    </div>
-    <div class="diff-box" id="diff-result" style="display:none"></div>
-  </div>
-</div>
-
-<!-- 5. 유효성 검증 -->
-<div id="panel-validity" class="panel">
-  <div class="card">
-    <h2>법령 유효성 검증</h2>
-    <div class="form-row">
-      <div class="form-group"><label>법령명 검색</label><input type="text" id="val-name" placeholder="법령명 입력..."></div>
-      <button onclick="checkValidity()">검증</button>
-    </div>
-  </div>
-  <div class="card" id="val-results" style="display:none">
-    <div id="val-content"></div>
-  </div>
-  <div class="card">
-    <h2>최근 시행 법령 모니터링</h2>
-    <div class="form-row">
-      <div class="form-group"><label>시도</label><input type="text" id="val-sido" placeholder="예: 세종특별자치시"></div>
-      <button onclick="listRecent()">조회</button>
-    </div>
-    <div id="val-recent"></div>
-  </div>
-</div>
-
-<!-- 6. 인용 그래프 -->
+<!-- 인용 그래프 -->
 <div id="panel-graph" class="panel">
   <div class="card">
     <h2>가장 많이 인용된 법령 TOP 20</h2>
     <div id="cited-statutes"></div>
   </div>
   <div class="card">
-    <h2>가장 많이 인용된 판례 TOP 20 <span style="font-size:.7rem;color:#999;font-weight:400">(참조판례 기반)</span></h2>
-    <div id="cited-cases"></div>
-  </div>
-  <div class="card">
     <h2>특정 법령을 인용한 판례</h2>
     <div class="form-row">
-      <div class="form-group"><label>법령 ID</label><input type="number" id="graph-statute-id"></div>
+      <div class="form-group"><label>법령 ID</label><input type="number" id="graph-statute-id" placeholder="법령 검색 결과의 ID"></div>
       <button onclick="citingCases()">조회</button>
     </div>
     <div id="citing-cases-result"></div>
@@ -285,7 +231,6 @@
   <div class="card">
     <h2>인용 네트워크 (노드·엣지)</h2>
     <div class="form-row">
-      <div class="form-group"><label>시도 필터</label><input type="text" id="net-sido" placeholder="예: 세종특별자치시"></div>
       <button onclick="loadNetwork()">불러오기</button>
     </div>
     <div id="graph-vis">버튼을 눌러 네트워크를 불러오세요</div>
@@ -336,7 +281,6 @@
   <div class="card">
     <h2>법령 데이터 추출</h2>
     <div class="form-row">
-      <div class="form-group"><label>시도</label><input type="text" id="exp-sido" placeholder="예: 광주광역시"></div>
       <button class="export-btn" onclick="exportData('statutes','json')">JSON 다운로드</button>
       <button class="export-btn" onclick="exportData('statutes','csv')">CSV 다운로드</button>
     </div>
@@ -355,7 +299,7 @@ function switchTab(name) {
   event.target.classList.add('active');
   document.getElementById('panel-' + name).classList.add('active');
   if (name === 'stats') loadStats();
-  if (name === 'graph') { loadTopCited(); loadTopCitedCases(); }
+  if (name === 'graph') loadTopCited();
 }
 
 function toast(msg) {
@@ -417,23 +361,19 @@ async function searchStatutes(page = 1) {
   stPage = page;
   const q = document.getElementById('st-q').value;
   const kind = document.getElementById('st-kind').value;
-  const sido = document.getElementById('st-sido').value;
-  const grade = document.getElementById('st-grade').value;
-  const params = new URLSearchParams({q,kind,sido,trust_grade:grade,page,size:20});
+  const params = new URLSearchParams({q,kind,page,size:20});
   const data = await api(`/statutes/search?${params}`);
 
   document.getElementById('st-results').style.display = 'block';
   document.getElementById('st-meta').textContent = `총 ${data.total.toLocaleString()}건`;
   const t = document.getElementById('st-table');
-  t.innerHTML = `<tr><th>ID</th><th>법령명</th><th>종류</th><th>시도</th><th>시군구</th><th>시행일</th><th>신뢰등급</th><th>조문</th></tr>
+  t.innerHTML = `<tr><th>ID</th><th>법령명</th><th>종류</th><th>소관부처</th><th>시행일</th><th>조문</th></tr>
   ${data.items.map(r => `<tr>
     <td>${r.id}</td>
     <td>${r.name}</td>
     <td>${r.kind}</td>
     <td>${r.region_sido||''}</td>
-    <td>${r.region_sigungu||''}</td>
     <td>${r.effective_from||''}</td>
-    <td>${badge(r.trust_grade, true)}</td>
     <td><button onclick="quickArticles(${r.id})" style="font-size:.7rem;padding:.2rem .5rem">조문</button></td>
   </tr>`).join('')}`;
 
@@ -453,10 +393,8 @@ async function quickArticles(id) {
 
 // ── 판례 상세 (본문·판시사항·참조조문·인용·유사) ──────────
 async function viewCase(id) {
-  const [d, cites, citedBy, sim] = await Promise.all([
+  const [d, sim] = await Promise.all([
     api(`/cases/${id}`),
-    api(`/graph/case/${id}/cites`).catch(() => ({items: []})),
-    api(`/graph/case/${id}/cited-by?size=10`).catch(() => ({total: 0, items: []})),
     api(`/cases/${id}/similar?limit=8`).catch(() => ({items: []})),
   ]);
   const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -485,10 +423,6 @@ async function viewCase(id) {
     <h1>${esc(d.case_name)}</h1>
     <div class="meta">${esc(d.case_no)} · ${esc(d.court)} · ${esc(d.date)} · ${esc(d.case_type)}
       ${d.source_url ? ` · <a href="${d.source_url}" target="_blank">law.go.kr 원문</a>` : ''}</div>
-    <h2>이 판례가 인용한 판례 (${cites.items.length})</h2>
-    ${caseList(cites.items, i => i.cited_id, i => i.case_name ? `${i.cited_case_no} ${i.case_name}` : i.cited_case_no)}
-    <h2>이 판례를 인용한 판례 (${citedBy.total})</h2>
-    ${caseList(citedBy.items, i => i.id, i => `${i.case_no} ${i.case_name}`)}
     <h2>유사 판례</h2>
     ${caseList(sim.items, i => i.id, i => `${i.case_no} ${i.case_name}`)}
     ${sec('판시사항', d.issues)}
@@ -540,64 +474,6 @@ function renderBarChart(elId, data, labelKey, valKey) {
     </div>`).join('');
 }
 
-// ── 지역 비교 ────────────────────────────────
-async function compareRegions() {
-  const kw = document.getElementById('cmp-keyword').value;
-  if (!kw) return;
-  const data = await api(`/compare/regions?keyword=${encodeURIComponent(kw)}`);
-  document.getElementById('cmp-results').style.display = 'block';
-  const regions = data.regions || {};
-  let html = `<p style="margin-bottom:1rem;font-size:.85rem">총 ${data.total}건</p>`;
-  for (const [sido, items] of Object.entries(regions)) {
-    html += `<h3 style="font-size:.9rem;color:#333;margin:.75rem 0 .4rem">${sido}</h3>
-    <table><tr><th>ID</th><th>법령명</th><th>종류</th><th>시군구</th><th>시행일</th></tr>
-    ${items.map(i=>`<tr><td>${i.id}</td><td>${i.name}</td><td>${i.kind}</td><td>${i.region_sigungu||''}</td><td>${i.effective_from||''}</td></tr>`).join('')}
-    </table>`;
-  }
-  document.getElementById('cmp-content').innerHTML = html;
-}
-
-async function diffStatutes() {
-  const id1 = document.getElementById('diff-id1').value;
-  const id2 = document.getElementById('diff-id2').value;
-  if (!id1 || !id2) return;
-  const data = await api(`/compare/statutes?id1=${id1}&id2=${id2}`);
-  const box = document.getElementById('diff-result');
-  box.style.display = 'block';
-  box.innerHTML = data.diff.split('\n').map(line => {
-    if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-    if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-    return line;
-  }).join('\n');
-}
-
-// ── 유효성 검증 ──────────────────────────────
-async function checkValidity() {
-  const name = document.getElementById('val-name').value;
-  if (!name) return;
-  const data = await api(`/validity/check?name=${encodeURIComponent(name)}`);
-  document.getElementById('val-results').style.display = 'block';
-  document.getElementById('val-content').innerHTML = `
-    <p style="font-size:.8rem;margin-bottom:.75rem">검증일: ${data.checked_at}</p>
-    <table><tr><th>법령명</th><th>종류</th><th>시도</th><th>시행일</th><th>신뢰등급</th><th>상태</th></tr>
-    ${data.items.map(i=>`<tr>
-      <td>${i.name}</td><td>${i.kind}</td><td>${i.region_sido||''}</td>
-      <td>${i.effective_from||''}</td><td>${badge(i.trust_grade,true)}</td>
-      <td>${badge(i.status,true)}</td>
-    </tr>`).join('')}
-    </table>`;
-}
-
-async function listRecent() {
-  const sido = document.getElementById('val-sido').value;
-  const data = await api(`/validity/expired?sido=${encodeURIComponent(sido)}&limit=30`);
-  document.getElementById('val-recent').innerHTML = `
-    <table style="margin-top:.75rem"><tr><th>ID</th><th>법령명</th><th>종류</th><th>시도</th><th>시행일</th><th>신뢰</th></tr>
-    ${data.map(r=>`<tr><td>${r.id}</td><td>${r.name}</td><td>${r.kind}</td>
-    <td>${r.region_sido||''}</td><td>${r.effective_from}</td><td>${badge(r.trust_grade,true)}</td></tr>`).join('')}
-    </table>`;
-}
-
 // ── 인용 그래프 ──────────────────────────────
 async function loadTopCited() {
   const data = await api('/graph/top-cited-statutes?limit=20');
@@ -607,21 +483,6 @@ async function loadTopCited() {
       <span class="bar-label" style="min-width:200px" title="${r.name}">${r.name.slice(0,22)}${r.name.length>22?'…':''}</span>
       <div class="bar-fill" style="width:${Math.max(4,(r.cnt/max)*300)}px"></div>
       <span class="bar-val">${r.cnt}건 (ID:${r.id})</span>
-    </div>`).join('');
-}
-
-async function loadTopCitedCases() {
-  const data = await api('/graph/top-cited-cases?limit=20');
-  const el = document.getElementById('cited-cases');
-  if (!data.length) { el.innerHTML = '<p style="color:#999;font-size:.85rem">인용 데이터 없음</p>'; return; }
-  const max = data[0]?.cnt || 1;
-  el.innerHTML = data.map(r => `
-    <div class="chart-bar">
-      <span class="bar-label" style="min-width:230px" title="${r.case_name}">
-        <a href="#" onclick="viewCase(${r.id});return false" style="color:#0d7377">${r.case_no} ${r.case_name.slice(0,16)}${r.case_name.length>16?'…':''}</a>
-      </span>
-      <div class="bar-fill" style="width:${Math.max(4,(r.cnt/max)*280)}px;background:#e57373"></div>
-      <span class="bar-val">${r.cnt}회</span>
     </div>`).join('');
 }
 
@@ -638,8 +499,7 @@ async function citingCases() {
 }
 
 async function loadNetwork() {
-  const sido = document.getElementById('net-sido').value;
-  const data = await api(`/graph/network?sido=${encodeURIComponent(sido)}&limit=50`);
+  const data = await api(`/graph/network?limit=50`);
   const vis = document.getElementById('graph-vis');
   if (!data.nodes.length) { vis.textContent = '데이터 없음'; return; }
   const statutes = data.nodes.filter(n=>n.type==='statute');
@@ -692,8 +552,7 @@ async function exportData(type, fmt) {
     const ib = document.getElementById('exp-include-body').checked;
     url = `/stats/export/cases?case_type=${encodeURIComponent(ct)}&fmt=${fmt}&include_body=${ib}`;
   } else {
-    const sido = document.getElementById('exp-sido').value;
-    url = `/stats/export/statutes?sido=${encodeURIComponent(sido)}&fmt=${fmt}`;
+    url = `/stats/export/statutes?fmt=${fmt}`;
   }
   if (fmt === 'csv') {
     window.location.href = url;
