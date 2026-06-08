@@ -62,28 +62,25 @@ async def upload_chunk(
     file: UploadFile = File(...),
     x_upload_token: str = Header(...),
 ):
+    """청크를 DB_PATH에 직접 이어붙임 (index 0=새로 쓰기, 이후=append).
+    별도 tmp/합치기 단계가 없어 추가 디스크 공간이 필요 없음."""
     _check_token(x_upload_token)
-    chunk_path = f"{DB_PATH}.chunk.{index:04d}"
     os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    with open(chunk_path, "wb") as f:
+    if index == 0:
+        # 새 업로드 시작 — 옛 방식 잔여물 정리
+        for leftover in (DB_PATH + ".tmp",):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+    mode = "wb" if index == 0 else "ab"
+    with open(DB_PATH, mode) as f:
         shutil.copyfileobj(file.file, f)
-    return {"status": "ok", "chunk": index, "bytes": os.path.getsize(chunk_path)}
+    return {"status": "ok", "chunk": index, "size_mb": round(os.path.getsize(DB_PATH) / 1024 / 1024, 1)}
 
 
 @app.post("/admin/finalize-db", include_in_schema=False)
 def finalize_db(x_upload_token: str = Header(...)):
+    """append 방식이라 합칠 게 없음 — 크기만 확인해 반환."""
     _check_token(x_upload_token)
-    data_dir = os.path.dirname(DB_PATH) or "."
-    prefix = os.path.basename(DB_PATH) + ".chunk."   # 실제 DB 파일명 기준 (medilaw.db.chunk.)
-    chunks = sorted(f for f in os.listdir(data_dir) if f.startswith(prefix))
-    if not chunks:
-        raise HTTPException(400, "청크 파일이 없습니다")
-    tmp = DB_PATH + ".tmp"
-    with open(tmp, "wb") as out:
-        for chunk_name in chunks:
-            chunk_path = os.path.join(data_dir, chunk_name)
-            with open(chunk_path, "rb") as f:
-                shutil.copyfileobj(f, out)
-            os.remove(chunk_path)
-    os.replace(tmp, DB_PATH)
-    return {"status": "ok", "chunks": len(chunks), "size_mb": round(os.path.getsize(DB_PATH) / 1024 / 1024, 1)}
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        raise HTTPException(400, "업로드된 DB가 비어 있습니다")
+    return {"status": "ok", "size_mb": round(os.path.getsize(DB_PATH) / 1024 / 1024, 1)}
