@@ -7,3 +7,6 @@ __pycache__/
 *.db-wal
 data/
 .DS_Store
+*.pdf
+*:Zone.Identifier
+*.bak

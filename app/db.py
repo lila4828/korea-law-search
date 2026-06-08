@@ -2,7 +2,7 @@ import os
 import sqlite3
 from functools import lru_cache
 
-DB_PATH = os.environ.get("DB_PATH", "data/law.db")
+DB_PATH = os.environ.get("DB_PATH", "data/medilaw.db")
 
 
 def get_conn() -> sqlite3.Connection:

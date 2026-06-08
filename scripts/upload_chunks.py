@@ -6,10 +6,10 @@ import os
 import sys
 import urllib.request
 
-DB_PATH = "data/law.db"
+DB_PATH = os.environ.get("DB_PATH", "data/medilaw.db")
 CHUNK_SIZE = 50 * 1024 * 1024  # 50MB
-BASE_URL = "https://korea-law-search-production.up.railway.app"
-TOKEN = "mylaw"
+BASE_URL = os.environ.get("RAILWAY_URL", "https://korea-law-search-production.up.railway.app")
+TOKEN = os.environ.get("UPLOAD_TOKEN", "mylaw")
 
 
 def upload_chunk(index: int, data: bytes) -> bool:

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>한국 법률 데이터 검색</title>
+<title>MediLaw — 의료법 판례·법령 검색</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Noto Sans KR', system-ui, sans-serif; background: #f5f7fa; color: #1a1a2e; }
@@ -98,7 +98,7 @@
 <body>
 
 <header>
-  <h1>한국 법률 데이터 검색</h1>
+  <h1>MediLaw — 의료법 판례·법령 검색</h1>
   <span id="db-summary"></span>
 </header>
 
@@ -124,14 +124,14 @@
       <div class="form-group"><label>예시 검색어</label>
         <select id="case-examples" onchange="if(this.value){document.getElementById('case-q').value=this.value;searchCases(1);}">
           <option value="">무엇을 검색할지 모르겠다면…</option>
-          <option>음주운전</option>
-          <option>부당해고</option>
-          <option>임대차보증금</option>
-          <option>손해배상</option>
-          <option>교통사고</option>
-          <option>상속재산</option>
-          <option>이혼 위자료</option>
-          <option>명예훼손</option>
+          <option>의료광고</option>
+          <option>무면허 의료행위</option>
+          <option>진료기록</option>
+          <option>의료과실</option>
+          <option>개인정보 유출</option>
+          <option>비대면 진료</option>
+          <option>요양급여</option>
+          <option>환자 동의</option>
         </select>
       </div>
       <div class="form-group"><label>사건종류</label>
@@ -163,12 +163,12 @@
       <div class="form-group"><label>예시 검색어</label>
         <select id="st-examples" onchange="if(this.value){document.getElementById('st-q').value=this.value;searchStatutes(1);}">
           <option value="">무엇을 검색할지 모르겠다면…</option>
-          <option>공유재산</option>
-          <option>주차장</option>
-          <option>보조금</option>
-          <option>민원</option>
-          <option>환경</option>
-          <option>건축</option>
+          <option>의료광고</option>
+          <option>진료기록</option>
+          <option>개인정보</option>
+          <option>의료기관 개설</option>
+          <option>비급여</option>
+          <option>전자의무기록</option>
         </select>
       </div>
       <div class="form-group"><label>종류</label>
